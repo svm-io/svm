@@ -19,8 +19,71 @@ jobs:
       - name: Build
         run: go build -v ./...
 
-      - name: Test
-        run: go test -v ./...
-
       - name: Lint
         run: go vet ./...
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install xvfb for headless display
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Run tests with virtual display
+        env:
+          DISPLAY: ":99"
+        run: |
+          Xvfb :99 -screen 0 1024x768x24 &
+          sleep 2
+          go test -v ./...
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install LXD
+        run: |
+          sudo snap install lxd --classic
+          sudo lxd init --auto --storage-pool=default
+
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth
+
+      - name: Run integration test with LXD
+        env:
+          DISPLAY: ":99"
+        run: |
+          Xvfb :99 -screen 0 1024x768x24 &
+          sleep 3
+          go test -v -run TestIntegration ./cmd/...
+
+  test-display:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install display utils
+        run: sudo apt-get update && sudo apt-get install -y western x11-utils
+
+      - name: Run display detection test
+        env:
+          DISPLAY: ":0"
+          XDG_SESSION_TYPE: x11
+        run: go test -v -run TestDetect ./pkg/display/...
