@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -213,6 +214,47 @@ func (c *Client) EnsureStrictProfile() error {
 	if c.ProfileExists("strict") {
 		return nil
 	}
+	config := map[string]string{
+		"security.nesting":     "false",
+		"security.privileged": "false",
+		"security.protocols":   "clear",
+		"linux.kernel_modules": "",
+		"limits.cpu":          "2",
+		"limits.memory":       "2GiB",
+	}
+	return c.ProfileCreate("strict", config)
+}
+
+func (c *Client) WaitForDisplayAccess(name string) error {
+	vmUser := "root"
+	cmd := exec.CommandContext(c.ctx, lxcBinary, "exec", name, "--", "test", "-d", "/run/user/1000")
+	if cmd.Run() == nil {
+		vmUser = "1000"
+	}
+
+	dirs := []string{"/run/user/1000", "/run/user/1000/wayland", "/run/user/1000/x11"}
+	for _, dir := range dirs {
+		mkdirCmd := exec.CommandContext(c.ctx, lxcBinary, "exec", name, "--", "mkdir", "-p", dir)
+		_ = mkdirCmd.Run()
+		chownCmd := exec.CommandContext(c.ctx, lxcBinary, "exec", name, "--", "chown", "-R", vmUser+":"+vmUser, filepath.Dir(dir))
+		_ = chownCmd.Run()
+	}
+
+	envFile := "/etc/profile.d/display-env.sh"
+	envContent := `#!/bin/bash
+if [ -n "$WAYLAND_DISPLAY" ]; then
+  export XDG_RUNTIME_DIR=/run/user/1000
+fi
+if [ -n "$DISPLAY" ]; then
+  export XAUTHORITY=$HOME/.Xauthority
+fi
+`
+	pushCmd := exec.CommandContext(c.ctx, lxcBinary, "file", "push", "-", name+envFile)
+	pushCmd.Stdin = strings.NewReader(envContent)
+	_ = pushCmd.Run()
+
+	return nil
+}
 	config := map[string]string{
 		"security.nesting":     "false",
 		"security.privileged":  "false",

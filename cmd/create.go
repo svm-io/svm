@@ -26,12 +26,17 @@ var createCmd = &cobra.Command{
 		}
 
 		client := lxd.New(ctx)
+
+		if err := client.EnsureStrictProfile(); err != nil {
+			return fmt.Errorf("failed to create strict profile: %w", err)
+		}
+
 		imageAlias, err := resolveImageAlias(ctx, image)
 		if err != nil {
 			return fmt.Errorf("failed to resolve image: %w", err)
 		}
 
-		if err := client.Launch(imageAlias, vmName, []string{"default"}); err != nil {
+		if err := client.Launch(imageAlias, vmName, []string{"strict"}); err != nil {
 			return fmt.Errorf("failed to launch VM: %w", err)
 		}
 
@@ -41,11 +46,15 @@ var createCmd = &cobra.Command{
 		}
 
 		if err := client.ApplySecurityRestrictions(vmName); err != nil {
-			client.Delete(vmName)
 			return fmt.Errorf("failed to apply restrictions: %w", err)
 		}
 
-		fmt.Printf("VM %q created with strict profile\n", vmName)
+		if err := client.WaitForDisplayAccess(vmName); err != nil {
+			client.Delete(vmName)
+			return fmt.Errorf("failed to setup display access: %w", err)
+		}
+
+		fmt.Printf("VM %q created with strict profile and display access\n", vmName)
 		return nil
 	},
 }
