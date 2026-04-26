@@ -255,13 +255,3 @@ fi
 
 	return nil
 }
-	config := map[string]string{
-		"security.nesting":     "false",
-		"security.privileged":  "false",
-		"security.protocols":   "clear",
-		"linux.kernel_modules": "",
-		"limits.cpu":           "2",
-		"limits.memory":        "2GiB",
-	}
-	return c.ProfileCreate("strict", config)
-}
